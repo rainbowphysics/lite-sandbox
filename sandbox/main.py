@@ -9,7 +9,7 @@ import os
 from types import ModuleType
 from typing import Callable
 
-ALLOWED_PACKAGES = ['math']
+ALLOWED_PACKAGES = ['math', 'collections', 'faulthandler']
 
 ROOT_PATH = os.path.dirname(os.path.dirname(__file__))
 PLUGINS_PATH = os.path.join(ROOT_PATH, 'test')
@@ -38,34 +38,37 @@ def strattr_or_default(module, attr, default):
 
     return default
 
-    # Define a custom loader to control imports
-
 
 def restricted(name):
     def restricted_func(*args, **kwargs):
-        raise ImportError("Using {} is not allowed".format(name))
+        raise PermissionError("Using {} is not allowed".format(name))
 
     return restricted_func
 
 
 def restricted_import(real_import):
     def import_func(name, globals=None, locals=None, fromlist=(), level=0):
+        caller_file = inspect.stack()[1].filename
+        relpath = os.path.relpath(caller_file, ROOT_PATH)
+        if relpath.startswith('.venv') or relpath.startswith('..'):
+            builtins.__import__ = real_import
+            import_result = real_import(name, globals, locals, fromlist, level)
+            builtins.__import__ = import_func
+            return import_result
+
         # Silently fail to automatically import _io
         if name == '_io':
             return
 
         if name in ALLOWED_PACKAGES:
-            del builtins.__import__
+            builtins.__import__ = real_import
             import_result = real_import(name, globals, locals, fromlist, level)
-            builtins.__import__ = restricted_import
+            builtins.__import__ = import_func
             return import_result
         else:
-            raise ImportError("Importing {} is not allowed".format(name))
+            raise ImportError('Importing {} is not allowed'.format(name))
 
     return import_func
-
-
-num_execs = 0
 
 
 def restricted_exec(real_exec):
@@ -73,7 +76,7 @@ def restricted_exec(real_exec):
         caller_file = inspect.stack()[1].filename
         if os.path.isfile(caller_file):
             if not os.path.samefile(caller_file, __file__):
-                raise PermissionError("exec() is not allowed from this context")
+                raise PermissionError('Using exec is not allowed')
 
         return real_exec(code, globals, locals)
 
@@ -95,9 +98,6 @@ class RestrictedLoader(iabc.Loader):
         builtins.open = restricted('open')
         builtins.exec = restricted_exec(real_exec)
 
-        global num_execs
-        num_execs = 10
-
         self.real_loader.exec_module(module)
 
         # Reset the import hook to default after execution
@@ -109,8 +109,6 @@ class RestrictedLoader(iabc.Loader):
 def load_plugin(script_path, verbose=True) -> tuple[ModuleType, PluginMetadata] | None:
     script = os.path.basename(script_path)
     module_name = os.path.splitext(script)[0]
-    if verbose:
-        print(f"Loading plugin: {module_name}")
     try:
         # TODO convert from importlib.util to pkgutil
         spec = importlib.util.spec_from_file_location(module_name, script_path)
@@ -138,17 +136,19 @@ def load_plugin(script_path, verbose=True) -> tuple[ModuleType, PluginMetadata] 
 
 # Get plugin scripts from folder, mostly used for testing
 def get_plugins() -> list[str]:
-    files = os.listdir(PLUGINS_PATH)
+    plugin_paths = []
+    for root, dirs, files in os.walk(PLUGINS_PATH, topdown=True):
+        for filename in files:
+            if filename == 'plugin.py':
+                plugin_paths.append(os.path.join(root, filename))
 
-    python_files = [f for f in files if f.endswith('.py') and f != '__init__.py']
-    if not python_files:
+    if not plugin_paths:
         logging.warning(f'No Python scripts found in {os.path.relpath(PLUGINS_PATH, ROOT_PATH)} folder.')
         return []
 
-    python_files = sorted(python_files)
+    plugin_paths = sorted(plugin_paths, key=os.path.basename)
 
-    # Convert to absolute paths and return
-    return [os.path.normcase(os.path.join(PLUGINS_PATH, filename)) for filename in python_files]
+    return plugin_paths
 
 
 def load_plugins(verbose=True) -> PluginListType:
