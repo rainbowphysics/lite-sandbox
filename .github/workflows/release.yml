@@ -14,6 +14,11 @@ jobs:
   tagged-release:
     name: "Tagged Release"
     runs-on: "ubuntu-latest"
+    environment:
+      name: pypi
+      url: https://pypi.org/p/lite-sandbox  # Replace <package-name> with your PyPI project name
+    permissions:
+      id-token: write  # IMPORTANT: mandatory for trusted publishing
 
     steps:
       - uses: actions/checkout@v3
@@ -22,7 +27,7 @@ jobs:
           python -m pip install -r requirements.txt
       - name: "Run sdist"
         run: |
-          python setup.py sdist --formats=zip,gztar
+          python setup.py sdist --formats=zip,gztar bdist_wheel
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
@@ -31,3 +36,10 @@ jobs:
           files: |
             dist/*.zip
             dist/*.tar.gz
+      - name: Download all the dists
+        uses: actions/download-artifact@v3
+        with:
+          name: python-package-distributions
+          path: dist/
+      - name: Publish distribution 📦 to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
