@@ -26,7 +26,7 @@ jobs:
           python -m pip install -r requirements.txt
       - name: "Run sdist"
         run: |
-          python setup.py sdist --formats=zip,gztar bdist_wheel
+          python setup.py sdist --formats=zip bdist_wheel
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
@@ -34,6 +34,5 @@ jobs:
           prerelease: false
           files: |
             dist/*.zip
-            dist/*.tar.gz
       - name: Publish distribution 📦 to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
