@@ -1,5 +1,9 @@
+import builtins
+import inspect
 import pkgutil
 import importlib
+import sys
+from importlib import abc as iabc
 import logging
 import os
 from types import ModuleType
@@ -9,6 +13,7 @@ ALLOWED_PACKAGES = ['math']
 
 ROOT_PATH = os.path.dirname(os.path.dirname(__file__))
 PLUGINS_PATH = os.path.join(ROOT_PATH, 'test')
+BASE_MODULE = sys.modules[__name__]
 
 
 class PluginMetadata:
@@ -33,6 +38,73 @@ def strattr_or_default(module, attr, default):
 
     return default
 
+    # Define a custom loader to control imports
+
+
+def restricted(name):
+    def restricted_func(*args, **kwargs):
+        raise ImportError("Using {} is not allowed".format(name))
+
+    return restricted_func
+
+
+def restricted_import(real_import):
+    def import_func(name, globals=None, locals=None, fromlist=(), level=0):
+        # Silently fail to automatically import _io
+        if name == '_io':
+            return
+
+        if name in ALLOWED_PACKAGES:
+            del builtins.__import__
+            import_result = real_import(name, globals, locals, fromlist, level)
+            builtins.__import__ = restricted_import
+            return import_result
+        else:
+            raise ImportError("Importing {} is not allowed".format(name))
+
+    return import_func
+
+
+num_execs = 0
+
+
+def restricted_exec(real_exec):
+    def exec_func(code, globals=None, locals=None):
+        caller_file = inspect.stack()[1].filename
+        if os.path.isfile(caller_file):
+            if not os.path.samefile(caller_file, __file__):
+                raise PermissionError("exec() is not allowed from this context")
+
+        return real_exec(code, globals, locals)
+
+    return exec_func
+
+
+class RestrictedLoader(iabc.Loader):
+    def __init__(self, spec, real_loader):
+        self.spec = spec
+        self.real_loader = real_loader
+
+    def exec_module(self, module):
+        real_import = builtins.__import__
+        real_open = builtins.open
+        real_exec = builtins.exec
+
+        # Use builtins module to access the built-in namespace
+        builtins.__import__ = restricted_import(real_import)
+        builtins.open = restricted('open')
+        builtins.exec = restricted_exec(real_exec)
+
+        global num_execs
+        num_execs = 10
+
+        self.real_loader.exec_module(module)
+
+        # Reset the import hook to default after execution
+        builtins.__import__ = real_import
+        builtins.open = real_open
+        builtins.exec = real_exec
+
 
 def load_plugin(script_path, verbose=True) -> tuple[ModuleType, PluginMetadata] | None:
     script = os.path.basename(script_path)
@@ -43,6 +115,10 @@ def load_plugin(script_path, verbose=True) -> tuple[ModuleType, PluginMetadata] 
         # TODO convert from importlib.util to pkgutil
         spec = importlib.util.spec_from_file_location(module_name, script_path)
         module = importlib.util.module_from_spec(spec)
+
+        # Set the custom loader
+        spec.loader = RestrictedLoader(spec, spec.loader)
+
         spec.loader.exec_module(module)
 
         # Get script directives/metadata variables
