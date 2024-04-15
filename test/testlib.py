@@ -3,7 +3,7 @@ import os
 import sys
 from io import StringIO
 
-from sandbox import load_plugin
+from sandbox import exec_sandboxed
 
 import logging
 import sys
@@ -26,7 +26,7 @@ def try_plugin(script_name='plugin.py'):
     stderr_handler.setLevel(logging.ERROR)
     root.addHandler(stderr_handler)
     plugin_path = os.path.join(os.path.dirname(inspect.stack()[1].filename), script_name)
-    load_plugin(plugin_path)
+    exec_sandboxed(plugin_path)
 
     sys.stdout = real_stdout
     sys.stderr = real_stderr
