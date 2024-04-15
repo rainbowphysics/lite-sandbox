@@ -6,7 +6,7 @@ with open('requirements.txt', 'r') as fd:
 
 setup(
     name='lite-sandbox',
-    version='0.0.1',
+    version='0.0.2',
     description='Lightweight sandboxing in Python for Python script test',
     url='https://github.com/rainbowphysics/lite-sandbox',
     author='Physics System',
