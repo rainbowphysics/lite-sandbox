@@ -106,7 +106,31 @@ class RestrictedLoader(iabc.Loader):
         builtins.exec = real_exec
 
 
-def load_plugin(script_path, verbose=True) -> tuple[ModuleType, PluginMetadata] | None:
+def exec_sandboxed(arg, globals=None, locals=None):
+    if isinstance(arg, str):
+        if os.path.exists(arg):  # Treat as path
+            script = os.path.basename(arg)
+            module_name = os.path.splitext(script)[0]
+
+            spec = importlib.util.spec_from_file_location(module_name, arg)
+
+            # Set the custom loader
+            module = importlib.util.module_from_spec(spec)
+        else:  # Treat as source code TODO
+            pass
+    elif isinstance(arg, ModuleType):
+        module = arg
+        spec = module.__spec__
+    else:
+        raise ValueError('Invalid input to exec_sandboxed')
+        return
+
+    spec.loader = RestrictedLoader(spec, spec.loader)
+    spec.loader.exec_module(module)
+    return module
+
+
+def __load_plugin(script_path, verbose=True) -> tuple[ModuleType, PluginMetadata] | None:
     script = os.path.basename(script_path)
     module_name = os.path.splitext(script)[0]
     try:
@@ -114,10 +138,7 @@ def load_plugin(script_path, verbose=True) -> tuple[ModuleType, PluginMetadata] 
         spec = importlib.util.spec_from_file_location(module_name, script_path)
         module = importlib.util.module_from_spec(spec)
 
-        # Set the custom loader
-        spec.loader = RestrictedLoader(spec, spec.loader)
-
-        spec.loader.exec_module(module)
+        exec_sandboxed(module)
 
         # Get script directives/metadata variables
         plugin_name = strattr_or_default(module, 'NAME', module_name)
@@ -135,7 +156,7 @@ def load_plugin(script_path, verbose=True) -> tuple[ModuleType, PluginMetadata] 
 
 
 # Get plugin scripts from folder, mostly used for testing
-def get_plugins() -> list[str]:
+def __get_plugins() -> list[str]:
     plugin_paths = []
     for root, dirs, files in os.walk(PLUGINS_PATH, topdown=True):
         for filename in files:
@@ -151,17 +172,17 @@ def get_plugins() -> list[str]:
     return plugin_paths
 
 
-def load_plugins(verbose=True) -> PluginListType:
+def __load_plugins(verbose=True) -> PluginListType:
     # Get all plugins
     if not os.path.exists(PLUGINS_PATH):
         os.mkdir(PLUGINS_PATH)
 
-    plugin_paths = get_plugins()
+    plugin_paths = __get_plugins()
 
     # Append each successfully loaded plugin to the output
     plugins = []
     for path in plugin_paths:
-        load_result = load_plugin(path, verbose=verbose)
+        load_result = __load_plugin(path, verbose=verbose)
         if load_result is None:
             continue
         plugins.append(load_result)
@@ -170,4 +191,4 @@ def load_plugins(verbose=True) -> PluginListType:
 
 
 if __name__ == '__main__':
-    print(load_plugins())
+    print(__load_plugins())
