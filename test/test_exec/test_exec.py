@@ -2,5 +2,10 @@ from ..testlib import try_plugin
 
 
 def test():
-    stdout, stderr = try_plugin()
-    assert stderr.replace('\n', '').endswith('Using exec is not allowed')
+    try:
+        try_plugin()
+        assert False
+    except PermissionError:
+        assert True
+    except Exception as e:
+        assert e is None

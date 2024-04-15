@@ -9,7 +9,7 @@ import os
 from types import ModuleType
 from typing import Callable
 
-ALLOWED_PACKAGES = ['math', 'collections', 'faulthandler']
+ALLOWED_PACKAGES = ['math', 'collections', 'faulthandler', '_pytest.fixtures']
 
 ROOT_PATH = os.path.dirname(os.path.dirname(__file__))
 PLUGINS_PATH = os.path.join(ROOT_PATH, 'test')

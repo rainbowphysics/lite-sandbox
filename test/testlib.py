@@ -11,6 +11,7 @@ import sys
 root = logging.getLogger()
 root.setLevel(logging.DEBUG)
 
+
 def try_plugin(script_name='plugin.py'):
     real_stdout = sys.stdout
     real_stderr = sys.stderr
